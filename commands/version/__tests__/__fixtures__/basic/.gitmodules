@@ -1,0 +1,6 @@
+[submodule "react-amap"]
+	path = packages/react-amap
+	url = https://github.com/huyongchao98/react-amap.git
+[submodule "bisheng-plugin-antd"]
+	path = packages/bisheng-plugin-antd
+	url = https://github.com/huyongchao98/bisheng-plugin-antd.git
