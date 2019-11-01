@@ -5,6 +5,9 @@ const { checkForNonEmptyString } = require("./common.js");
 
 module.exports = {
   readNewGitmodulesFile: async path => {
+    if (path == null) {
+      return null;
+    }
     let fileString = "";
     checkForNonEmptyString(path);
     try {
@@ -17,6 +20,9 @@ module.exports = {
           }
         });
       });
+      if (fileString === "") {
+        return null;
+      }
       return new GitmodulesObject(fileString, path);
     } catch (err) {
       if (err.code === "ENOENT") {

@@ -2,7 +2,7 @@ const gitmodulesHandle = require("../lib/gitmodules/gitmodulesHandler.js");
 const path = require("path");
 
 describe("gitSubmodules support", () => {
-  test("gitmodules read", async () => {
+  test("file path is normal,gitmodules read", async () => {
     const { readNewGitmodulesFile } = gitmodulesHandle;
     const thePath = path.resolve(__dirname, "./__fixtures__/basic/.gitmodules");
     const gitmodulesObject = await readNewGitmodulesFile(thePath);
@@ -22,5 +22,16 @@ describe("gitSubmodules support", () => {
         expect(gitmoduleInfoObject.path).toBe("packages/bisheng-plugin-antd");
       }
     });
+  });
+  test("file  is not exist,gitmodules read", async () => {
+    const { readNewGitmodulesFile } = gitmodulesHandle;
+    const thePath = path.resolve(__dirname, "./__fixtures__/basic/.gitmodules12");
+    const gitmodulesObject = await readNewGitmodulesFile(thePath);
+    expect(gitmodulesObject).toBeNull();
+  });
+  test("file  path is null,gitmodules read", async () => {
+    const { readNewGitmodulesFile } = gitmodulesHandle;
+    const gitmodulesObject = await readNewGitmodulesFile(null);
+    expect(gitmodulesObject).toBeNull();
   });
 });
