@@ -2,6 +2,7 @@
 
 const os = require("os");
 const chalk = require("chalk");
+const path = require("path");
 const dedent = require("dedent");
 const minimatch = require("minimatch");
 const pMap = require("p-map");
@@ -33,6 +34,7 @@ const isAnythingCommitted = require("./lib/is-anything-committed");
 const makePromptVersion = require("./lib/prompt-version");
 const createRelease = require("./lib/create-release");
 const { updateLockfileVersion } = require("./lib/update-lockfile-version");
+const gitmodulesHandle = require("./lib/gitmodules/gitmodulesHandler");
 
 const { collectPackages, getPackagesForOption } = collectUpdates;
 
@@ -96,6 +98,8 @@ class VersionCommand extends Command {
 
     // https://docs.npmjs.com/misc/config#save-prefix
     this.savePrefix = this.options.exact ? "" : "^";
+
+    this.getfilesWithCwdOpts = [];
   }
 
   initialize() {
@@ -599,10 +603,87 @@ class VersionCommand extends Command {
     }
 
     if (this.commitAndTag) {
-      chain = chain.then(() => gitAdd(Array.from(changedFiles), this.execOpts));
+      // 获取当前的gitmodules子模块配置文件
+      chain = this.dealSubmodulesWithChangeFile(this.execOpts, Array.from(changedFiles), gitAdd, chain);
     }
 
     return chain;
+  }
+
+  static async getSubmodules(opts) {
+    const submoduleFilePath = path.resolve(opts.cwd, ".gitmodules");
+    const { readNewGitmodulesFile } = gitmodulesHandle;
+    const gitmodulesObject = await readNewGitmodulesFile(submoduleFilePath);
+    return gitmodulesObject;
+  }
+
+  // 返回文件数组 [{files: 文件目录 opts: 执行git的参数}]  不同子模块下opts不同
+  static getfilesWithCwdOpts(allChageFiles, opts, gitmodulesObject) {
+    if (gitmodulesObject == null) {
+      return null;
+    }
+
+    if (gitmodulesObject != null) {
+      const submoduleFiles = {};
+      const currentProjectFiles = [];
+      const { modules } = gitmodulesObject;
+      Array.from(allChageFiles).forEach(item => {
+        const keys = Object.keys(modules);
+        let isSubmodules;
+        if (keys != null) {
+          try {
+            keys.forEach(key => {
+              const submodule = modules[key];
+              const { path: thePath } = submodule;
+
+              // 将子目录的路径作为key然后作为git add cwd的参数进行处理
+              if (item.startsWith(thePath)) {
+                isSubmodules = true;
+                let theModulesChangeFiles = submoduleFiles[thePath]; //
+                if (theModulesChangeFiles == null) {
+                  theModulesChangeFiles = [];
+                }
+                theModulesChangeFiles.push(item);
+                submoduleFiles[thePath] = theModulesChangeFiles;
+                throw Error("已找到数据");
+              }
+            });
+          } catch (err) {
+            console.log(err);
+          }
+        }
+
+        if (!isSubmodules) {
+          currentProjectFiles.push(item);
+        }
+      });
+
+      const groupFiles = [{ files: currentProjectFiles, opts }];
+      const kyeOfsubmoduleFiles = Object.keys(submoduleFiles);
+      if (kyeOfsubmoduleFiles.length > 0) {
+        kyeOfsubmoduleFiles.forEach(key => {
+          const paths = submoduleFiles[key];
+          const newOpts = { ...opts, cwd: key };
+          groupFiles.push({ files: paths, opts: newOpts });
+        });
+      }
+      return groupFiles;
+    }
+
+    return null;
+  }
+
+  async dealSubmodulesWithChangeFile(opts, filesPath, commandFunc, chain) {
+    let newChain = chain;
+    const gitmodulesObject = await this.getSubmodules(opts);
+    this.getfilesWithCwdOpts = this.getfilesWithCwdOpts(filesPath, opts, gitmodulesObject);
+    if (this.getfilesWithCwdOpts != null) {
+      this.getfilesWithCwdOpts.forEach(item => {
+        const { files, opts: theOpts } = item;
+        newChain = chain.then(() => commandFunc(files, theOpts));
+      });
+    }
+    return newChain;
   }
 
   commitAndTagUpdates() {
@@ -636,6 +717,16 @@ class VersionCommand extends Command {
     const subject = this.options.message || "Publish";
     const message = tags.reduce((msg, tag) => `${msg}${os.EOL} - ${tag}`, `${subject}${os.EOL}`);
 
+    if (this.getfilesWithCwdOpts != null && this.getfilesWithCwdOpts.length > 0) {
+      this.getfilesWithCwdOpts.forEach(item => {
+        const { opts } = item;
+        return Promise.resolve()
+          .then(() => gitCommit(message, this.gitOpts, opts))
+          .then(() => Promise.all(tags.map(tag => gitTag(tag, this.gitOpts, opts))))
+          .then(() => tags);
+      });
+    }
+
     return Promise.resolve()
       .then(() => gitCommit(message, this.gitOpts, this.execOpts))
       .then(() => Promise.all(tags.map(tag => gitTag(tag, this.gitOpts, this.execOpts))))
@@ -649,6 +740,16 @@ class VersionCommand extends Command {
       ? this.options.message.replace(/%s/g, tag).replace(/%v/g, version)
       : tag;
 
+    if (this.getfilesWithCwdOpts != null && this.getfilesWithCwdOpts.length > 0) {
+      this.getfilesWithCwdOpts.forEach(item => {
+        const { opts } = item;
+        return Promise.resolve()
+          .then(() => gitCommit(message, this.gitOpts, opts))
+          .then(() => gitTag(tag, this.gitOpts, opts))
+          .then(() => [tag]);
+      });
+    }
+
     return Promise.resolve()
       .then(() => gitCommit(message, this.gitOpts, this.execOpts))
       .then(() => gitTag(tag, this.gitOpts, this.execOpts))
@@ -657,6 +758,21 @@ class VersionCommand extends Command {
 
   gitPushToRemote() {
     this.logger.info("git", "Pushing tags...");
+    let result = 0;
+    if (this.getfilesWithCwdOpts != null && this.getfilesWithCwdOpts.length > 0) {
+      this.getfilesWithCwdOpts.forEach(item => {
+        const { opts } = item;
+        const currentBranch = getCurrentBranch(opts);
+        result = gitPush(this.gitRemote, currentBranch, opts);
+        if (result === 1) {
+          return result;
+        }
+      });
+    }
+
+    if (result === 0) {
+      return result;
+    }
 
     return gitPush(this.gitRemote, this.currentBranch, this.execOpts);
   }
