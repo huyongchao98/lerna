@@ -657,7 +657,9 @@ class VersionCommand extends Command {
           currentProjectFiles.push(item);
         }
       });
-
+      if (currentProjectFiles.length === 0) {
+        return null;
+      }
       const groupFiles = [{ files: currentProjectFiles, opts }];
       const kyeOfsubmoduleFiles = Object.keys(submoduleFiles);
       if (kyeOfsubmoduleFiles.length > 0) {
@@ -675,8 +677,8 @@ class VersionCommand extends Command {
 
   async dealSubmodulesWithChangeFile(opts, filesPath, commandFunc, chain) {
     let newChain = chain;
-    const gitmodulesObject = await this.getSubmodules(opts);
-    this.getfilesWithCwdOpts = this.getfilesWithCwdOpts(filesPath, opts, gitmodulesObject);
+    const gitmodulesObject = await this.constructor.getSubmodules(opts);
+    this.getfilesWithCwdOpts = this.constructor.getfilesWithCwdOpts(filesPath, opts, gitmodulesObject);
     if (this.getfilesWithCwdOpts != null) {
       this.getfilesWithCwdOpts.forEach(item => {
         const { files, opts: theOpts } = item;

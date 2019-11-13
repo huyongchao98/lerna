@@ -627,6 +627,7 @@ describe("VersionCommand", () => {
   });
 
   it("versions all transitive dependents after change", async () => {
+    console.log("121212");
     const testDir = await initFixture("snake-graph");
 
     await gitTag(testDir, "v1.0.0");

@@ -26,8 +26,11 @@ module.exports = {
       return new GitmodulesObject(fileString, path);
     } catch (err) {
       if (err.code === "ENOENT") {
-        const fileHandle = await fs.open(path, "w+");
-        await fs.close(fileHandle);
+        const fileHandle = await fs.open(path, "r");
+
+        if (fileHandle != null) {
+          await fs.close(fileHandle);
+        }
 
         fileString = "";
         return new GitmodulesObject(fileString, path);
