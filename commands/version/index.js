@@ -686,6 +686,8 @@ class VersionCommand extends Command {
         const { files, opts: theOpts } = item;
         newChain = newChain.then(() => commandFunc(files, theOpts));
       });
+    } else {
+      newChain = newChain.then(() => commandFunc(filesPath, opts));
     }
     return newChain;
   }
