@@ -604,6 +604,8 @@ class VersionCommand extends Command {
 
     if (this.commitAndTag) {
       // 获取当前的gitmodules子模块配置文件
+      const { cwd } = this.execOpts;
+      console.log(cwd);
       chain = this.dealSubmodulesWithChangeFile(this.execOpts, Array.from(changedFiles), gitAdd, chain);
     }
 
@@ -682,7 +684,7 @@ class VersionCommand extends Command {
     if (this.getfilesWithCwdOpts != null) {
       this.getfilesWithCwdOpts.forEach(item => {
         const { files, opts: theOpts } = item;
-        newChain = chain.then(() => commandFunc(files, theOpts));
+        newChain = newChain.then(() => commandFunc(files, theOpts));
       });
     }
     return newChain;
